@@ -2,274 +2,104 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct vehicle_ {
-  int range;
-
-  struct vehicle_ *left, *right;
-} vehicle_t;
+#define BLACK 0
+#define RED 1
 
 typedef struct station_ {
-  int distance;
-  vehicle_t *vehicles;
-
+  int key, color;
   struct station_ *left, *right, *parent;
-  int red;
+
+  int *vehicles;
 } station_t;
+typedef struct station_tree_ {
+  station_t *root, *nil;
+} station_tree_t;
 
-station_t *cmd_add_station(station_t *stations_root, int distance,
-                           int vehicle_n, int vehicles[]);
-
-int parent(int i);
-int left(int i);
-int right(int i);
-vehicle_t *build_vehicle_heap(int vehicles_n, int *ranges);
-vehicle_t *build_vehicle_heap_node(int vehicles_n, int *ranges, int curr);
-station_t *find_station(station_t *stations_root, int distance);
-void heapSort(int *, int);
-station_t *insert_station(station_t *root, int distance, int vehicle_n,
-                          int *vehicles);
-void insert_station_fixup(station_t *root, station_t *z);
-void max_heapify(int vehicles_n, int *ranges, int i);
-void rotate_left(station_t *root, station_t *x);
-void rotate_right(station_t *root, station_t *x);
-
-void swap(int *a, int *b) {
-
-  int temp = *a;
-  *a = *b;
-  *b = temp;
-}
+void cmd_add_station(station_tree_t *T);
+void print_stations(station_tree_t *T);
 
 int main() {
-  station_t *stations_root = NULL;
-  int i;
+  station_tree_t *T = malloc(sizeof(station_tree_t));
 
-  char command[20];
-  // eof_res should be -1 when there is no stdin left to read
-  int eof_res = scanf("%s", command);
+  if (T) {
+    T->nil = malloc(sizeof(station_t));
+    T->nil->left = T->nil;
+    T->nil->right = T->nil;
+    T->nil->parent = T->nil;
+    T->root = T->nil;
 
-  while (eof_res >= 0) {
-    if (!strcmp(command, "aggiungi-stazione")) {
-      int distance, vehicle_n;
-      scanf("%d %d", &distance, &vehicle_n);
+    char command[20];
+    // eof_res should be -1 when there is no stdin left to read
+    int eof_res = scanf("%s", command);
 
-      int *ranges = malloc(sizeof(int) * vehicle_n);
-
-      if (ranges) {
-        for (i = 0; i < vehicle_n; i++)
-          scanf("%d", &ranges[i]);
-
-        stations_root =
-            cmd_add_station(stations_root, distance, vehicle_n, ranges);
+    while (eof_res >= 0) {
+      printf("> %s\n", command);
+      if (!strcmp(command, "aggiungi-stazione"))
+        cmd_add_station(T);
+      else if (!strcmp(command, "demolisci-stazione")) {
+      } else if (!strcmp(command, "aggiungi-auto")) {
+      } else if (!strcmp(command, "rottama-auto")) {
+      } else if (!strcmp(command, "pianifica-percorso")) {
       } else {
-        printf("[main] Allocation error.\n");
+        printf("Unknown command: %s\n", command);
         return -1;
       }
-    } else if (!strcmp(command, "demolisci-stazione")) {
-    } else if (!strcmp(command, "aggiungi-auto")) {
-    } else if (!strcmp(command, "rottama-auto")) {
-    } else if (!strcmp(command, "pianifica-percorso")) {
-    } else {
-      printf("Unknown command: %s\n", command);
-      return -1;
-    }
 
-    eof_res = scanf("%s", command);
+      print_stations(T);
+      eof_res = scanf("%s", command);
+    }
+  } else {
+    printf("[main] Allocation error.\n");
+    return -1;
   }
 }
 
-#pragma region utilities
-// I'm converting from the 1-based pseudocode to 0-based C arrays
-int parent(int i) { return ((i + 1) / 2) - 1; }
-int left(int i) { return (2 * (i + 1)) - 1; }
-int right(int i) { return ((2 * (i + 1)) + 1) - 1; }
+#pragma region RB_tree
 
-vehicle_t *build_vehicle_heap(int vehicles_n, int *ranges) {
-  int i;
+/**
+ * @brief Creates a station
+ *
+ * @param T A pointer to the tree the station will be inserted in (please note
+ * that this function will not do it, you need to use `insert_station`)
+ * @param key The key of the station (its distance from the start of the road)
+ * @param vehicles An array of vehicles to add
+ * @param vn The number of vehicles in the array
+ * @return A pointer to the station node
+ */
+station_t *create_station(station_tree_t *T, int key, int *vehicles, int vn) {
+  station_t *s = malloc(sizeof(station_t));
 
-  heapSort(ranges, vehicles_n);
+  if (s) {
+    s->key = key;
+    s->color = RED;
+    s->left = T->nil;
+    s->right = T->nil;
+    s->parent = T->nil;
 
-  return build_vehicle_heap_node(vehicles_n, ranges, 0);
-}
-
-vehicle_t *build_vehicle_heap_node(int vehicles_n, int *ranges, int curr) {
-  int l = left(curr), r = right(curr);
-
-  vehicle_t *node = malloc(sizeof(vehicle_t));
-  if (node) {
-    node->range = ranges[curr];
-
-    if (l < vehicles_n)
-      node->left = build_vehicle_heap_node(vehicles_n, ranges, l);
-    else
-      node->left = NULL;
-    if (r < vehicles_n)
-      node->left = build_vehicle_heap_node(vehicles_n, ranges, r);
-    else
-      node->left = NULL;
+    // TODO: add vechicles as max-heap
+    s->vehicles = vehicles;
   } else
-    printf("[build_vehicle_heap_node] Allocation error.");
+    printf("[create_station] Allocation error.\n");
 
-  return node;
+  return s;
 }
 
-station_t *find_root(station_t *node) {
-  if (node && node->parent != NULL)
-    return find_root(node->parent);
-  else
-    return node;
-}
-
-station_t *find_station(station_t *stations_root, int distance) {
-  if (stations_root == NULL)
-    return NULL;
-
-  int curr = stations_root->distance;
-  if (curr == distance)
-    return stations_root;
-
-  if (curr > distance)
-    return find_station(stations_root->left, distance);
-  else
-    return find_station(stations_root->right, distance);
-}
-
-void heapSort(int arr[], int N) {
-  int i;
-  // Build max heap
-  for (i = N / 2 - 1; i >= 0; i--)
-
-    max_heapify(N, arr, i);
-
-  // Heap sort
-  for (i = N - 1; i >= 0; i--) {
-
-    swap(&arr[0], &arr[i]);
-
-    // Heapify root element
-    // to get highest element at
-    // root again
-    max_heapify(i, arr, 0);
-  }
-}
-station_t *insert_station(station_t *root, int distance, int vehicle_n,
-                          int *vehicles) {
-  station_t *y = NULL;
-  station_t *x = root;
-
-  station_t *z = malloc(sizeof(station_t));
-  if (z) {
-    z->parent = NULL;
-    z->distance = distance;
-    z->vehicles = build_vehicle_heap(vehicle_n, vehicles);
-
-    if (root == NULL)
-      return z;
-
-    while (x != NULL) {
-      y = x;
-      if (z->distance < x->distance)
-        x = x->left;
-      else
-        x = x->right;
-    }
-
-    z->parent = y;
-    if (y == NULL)
-      root = z;
-    else if (z->distance < y->distance)
-      y->left = z;
-    else
-      y->right = z;
-
-    z->left = NULL;
-    z->right = NULL;
-    z->red = 1;
-
-    insert_station_fixup(root, z);
-  } else
-    printf("[insert_station] Allocation error.");
-
-  return find_root(z);
-}
-
-void insert_station_fixup(station_t *root, station_t *z) {
-  station_t *x, *y;
-
-  if (root == z)
-    root->red = 0;
-  else {
-    x = z->parent;
-
-    if (x->red) {
-      if (x == x->parent->left) {
-        y = x->parent->right;
-
-        if (y->red) {
-          x->red = 0;
-          y->red = 0;
-          x->parent->red = 1;
-          insert_station_fixup(root, x->parent);
-        } else if (z == x->right) {
-          z = x;
-          rotate_left(root, z);
-          x = z->parent;
-        }
-
-        x->red = 0;
-        x->parent->red = 1;
-        rotate_right(root, x->parent);
-      } else {
-        y = x->parent->left;
-
-        if (y->red) {
-          x->red = 0;
-          y->red = 0;
-          x->parent->red = 1;
-          insert_station_fixup(root, x->parent);
-        } else if (z == x->left) {
-          z = x;
-          rotate_right(root, z);
-          x = z->parent;
-        }
-
-        x->red = 0;
-        x->parent->red = 1;
-        rotate_left(root, x->parent);
-      }
-    }
-  }
-}
-
-void max_heapify(int vehicles_n, int *ranges, int i) {
-  int l = left(i), r = right(i);
-  int max;
-
-  if (l < vehicles_n && ranges[l] > ranges[i])
-    max = l;
-  else
-    max = i;
-  if (r < vehicles_n && ranges[r] > ranges[max])
-    max = r;
-
-  if (max != i) {
-    int tmp = ranges[i];
-    ranges[i] = ranges[max];
-    ranges[max] = tmp;
-    max_heapify(vehicles_n, ranges, max);
-  }
-}
-
-void rotate_left(station_t *root, station_t *x) {
+/**
+ * @brief Rotates an RB tree to the left
+ *
+ * @param T A pointer to the station tree to rotate
+ * @param x A pointer to the pivot of the rotation
+ */
+void station_rotate_left(station_tree_t *T, station_t *x) {
   station_t *y = x->right;
   x->right = y->left;
 
-  if (y->left != NULL)
+  if (y->left != T->nil)
     y->left->parent = x;
   y->parent = x->parent;
 
-  if (x->parent == NULL)
-    root = y;
+  if (x->parent == T->nil)
+    T->root = y;
   else if (x == x->parent->left)
     x->parent->left = y;
   else
@@ -279,16 +109,22 @@ void rotate_left(station_t *root, station_t *x) {
   x->parent = y;
 }
 
-void rotate_right(station_t *root, station_t *x) {
+/**
+ * @brief Rotates an RB tree to the right
+ *
+ * @param T A pointer to the station tree to rotate
+ * @param x A pointer to the pivot of the rotation
+ */
+void station_rotate_right(station_tree_t *T, station_t *x) {
   station_t *y = x->left;
   x->left = y->right;
 
-  if (y->right != NULL)
+  if (y->right != T->nil)
     y->right->parent = x;
   y->parent = x->parent;
 
-  if (x->parent == NULL)
-    root = y;
+  if (x->parent == T->nil)
+    T->root = y;
   else if (x == x->parent->right)
     x->parent->right = y;
   else
@@ -298,24 +134,161 @@ void rotate_right(station_t *root, station_t *x) {
   x->parent = y;
 }
 
-// vehicle_t *insert_vehicle(vehicle_t *vehicles_root, int range) {
+/**
+ * @brief Fixes the station RB tree after insertion
+ *
+ * @param T A pointer to the stations tree
+ * @param z A pointer to the node that has just been inserted via
+ * `insert_station`
+ */
+void insert_station_fixup(station_tree_t *T, station_t *z) {
+  station_t *y;
 
-// }
+  while (z->parent != T->nil && z->parent->color == RED) {
+    if (z->parent == z->parent->parent->left) {
+      y = z->parent->parent->right;
+
+      if (y->color == RED) {
+        z->parent->color = BLACK;
+        y->color = BLACK;
+        z->parent->parent->color = RED;
+        z = z->parent->parent;
+      } else {
+        if (z == z->parent->right) {
+          z = z->parent;
+          station_rotate_left(T, z);
+        }
+
+        z->parent->color = BLACK;
+        z->parent->parent->color = RED;
+        station_rotate_right(T, z->parent->parent);
+      }
+    } else {
+      y = z->parent->parent->left;
+
+      if (y->color == RED) {
+        z->parent->color = BLACK;
+        y->color = BLACK;
+        z->parent->parent->color = RED;
+        z = z->parent->parent;
+      } else {
+        if (z == z->parent->left) {
+          z = z->parent;
+          station_rotate_right(T, z);
+        }
+
+        z->parent->color = BLACK;
+        z->parent->parent->color = RED;
+        station_rotate_left(T, z->parent->parent);
+      }
+    }
+  }
+
+  T->root->color = BLACK;
+}
+
+/**
+ * Inserts a station into the RB tree
+ * @param *T A pointer to a station RB tree
+ * @param *x A pointer to the station node to insert, generated by
+ * `create_station`
+ */
+void insert_station(station_tree_t *T, station_t *x) {
+  station_t *pre = T->nil;
+  station_t *cur = T->root;
+
+  while (cur != T->nil) {
+    pre = cur;
+    if (x->key < cur->key)
+      cur = cur->left;
+    else
+      cur = cur->right;
+  }
+
+  x->parent = pre;
+  if (pre == T->nil)
+    T->root = x;
+  else if (x->key < pre->key)
+    pre->left = x;
+  else
+    pre->right = x;
+
+  x->color = RED;
+  insert_station_fixup(T, x);
+}
+
+/**
+ * @brief Recursive step of `find_station`
+ *
+ * @param T A pointer to the tree to search
+ * @param key The key of the node to search for
+ * @param curr A pointer to the current node
+ * @return A pointer to the target node
+ */
+station_t *find_station_rec(station_tree_t *T, int key, station_t *curr) {
+  if (curr == T->nil || curr->key == key)
+    return curr;
+
+  station_t *res = T->nil;
+  if (curr->left != T->nil)
+    res = find_station_rec(T, key, curr->left);
+  if (res == T->nil && curr->right != T->nil)
+    res = find_station_rec(T, key, curr->right);
+
+  return res;
+}
+/**
+ * @brief Finds a station node in the tree
+ *
+ * @param T A pointer to the tree to search
+ * @param key The key of the node to search for
+ * @return A pointer to the target node
+ */
+station_t *find_station(station_tree_t *T, int key) {
+  return find_station_rec(T, key, T->root);
+}
+
+void print_stations_rec(station_tree_t *T, station_t *curr) {
+  if (curr->left != T->nil)
+    print_stations_rec(T, curr->left);
+
+  printf("%d:\n", curr->key);
+
+  if (curr->right != T->nil)
+    print_stations_rec(T, curr->right);
+}
+void print_stations(station_tree_t *T) {
+  return print_stations_rec(T, T->root);
+}
+
 #pragma endregion
 
 #pragma region commands
 
-station_t *cmd_add_station(station_t *stations_root, int distance,
-                           int vehicle_n, int vehicles[]) {
-  if (find_station(stations_root, distance) != NULL)
-    printf("non aggiunta\n");
-  else {
-    stations_root =
-        insert_station(stations_root, distance, vehicle_n, vehicles);
-    printf("aggiunta\n");
-  }
+void cmd_add_station(station_tree_t *T) {
+  int dist, vn;
+  scanf("%d %d", &dist, &vn);
 
-  return stations_root;
+  if (find_station(T, dist) != T->nil) {
+    printf("non aggiunta\n");
+    char *_ = "";
+    scanf("%[^\n]", _); // Discards the rest of the line
+  } else {
+    int i;
+    int *vehicles = malloc(sizeof(int) * vn);
+
+    if (vehicles) {
+      for (i = 0; i < vn; i++)
+        scanf("%d", &vehicles[i]);
+
+      station_t *s = create_station(T, dist, vehicles, vn);
+
+      insert_station(T, s);
+
+      printf("aggiunta\n");
+    } else
+      printf("[cmd_add_station] Allocation error.\n");
+  }
 }
 
 #pragma endregion
