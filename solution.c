@@ -5,11 +5,16 @@
 #define BLACK 0
 #define RED 1
 
+typedef struct vehicles_ {
+  int size;
+  int *heap;
+} vehicles_t;
+
 typedef struct station_ {
   int key, color;
   struct station_ *left, *right, *parent;
 
-  int *vehicles;
+  vehicles_t *vehicles;
 } station_t;
 typedef struct station_tree_ {
   station_t *root, *nil;
@@ -33,7 +38,6 @@ int main() {
     int eof_res = scanf("%s", command);
 
     while (eof_res >= 0) {
-      printf("> %s\n", command);
       if (!strcmp(command, "aggiungi-stazione"))
         cmd_add_station(T);
       else if (!strcmp(command, "demolisci-stazione")) {
@@ -45,7 +49,6 @@ int main() {
         return -1;
       }
 
-      print_stations(T);
       eof_res = scanf("%s", command);
     }
   } else {
@@ -53,6 +56,99 @@ int main() {
     return -1;
   }
 }
+
+#pragma region max_heap
+/** Returns the 1-based index of the left child of the n-th element of a 1-based
+ * array */
+int left(int n) { return 2 * n; }
+/** Returns the 1-based index of the right child of the n-th element of a
+ * 1-based array */
+int right(int n) { return 2 * n + 1; }
+/** Returns the 1-based index of the parent of the n-th element of a 1-based
+ * array */
+int parent(int n) { return n / 2; }
+
+/** Swaps two integer values */
+void swap(int *a, int *b) {
+  int tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+
+/**
+ * @brief Makes a value descend the heap towards the leaves until it's greater
+ * than the children
+ *
+ * @param A A pointer to the heap structure
+ * @param n The 1-based index of the element in the heap
+ */
+void max_heapify(vehicles_t *A, int n) {
+  int l = left(n);
+  int r = right(n);
+  int posmax;
+
+  if (l <= A->size && A->heap[l - 1] > A->heap[n - 1])
+    posmax = l;
+  else
+    posmax = n;
+
+  if (r <= A->size && A->heap[r - 1] > A->heap[posmax - 1])
+    posmax = r;
+
+  if (posmax != n) {
+    swap(&A->heap[n - 1], &A->heap[posmax - 1]);
+    max_heapify(A, posmax);
+  }
+}
+
+/**
+ * @brief Transforms an array into the representation of a max heap
+ *
+ * @param A A pointer to the heap structure
+ */
+void build_max_heap(vehicles_t *A) {
+  int i;
+  for (i = A->size / 2; i > 0; i--) // i is 1-based!
+    max_heapify(A, i);
+}
+
+/**
+ * @brief Removes the maximum element of a heap and returns it
+ *
+ * @param A A pointer to the heap structure
+ * @return The maximum element of the heap
+ */
+int heap_shift(vehicles_t *A) {
+  if (A->size < 1)
+    return -1;
+
+  int max = A->heap[0];
+  A->heap[0] = A->heap[A->size - 1];
+  A->size = A->size - 1;
+
+  max_heapify(A, 1);
+
+  return max;
+}
+
+/**
+ * @brief Add an element to the heap
+ *
+ * @param A A pointer to the heap structure
+ * @param key The key of the new element
+ */
+void heap_insert(vehicles_t *A, int key) {
+  A->size = A->size + 1;
+  A->heap[A->size - 1] = key;
+
+  int i = A->size;
+  while (i > 1 && A->heap[parent(i) - 1] < A->heap[i - 1]) {
+    swap(&A->heap[parent(i) - 1], &A->heap[i - 1]);
+    i = parent(i);
+  }
+}
+
+#pragma endregion
 
 #pragma region RB_tree
 
@@ -76,8 +172,13 @@ station_t *create_station(station_tree_t *T, int key, int *vehicles, int vn) {
     s->right = T->nil;
     s->parent = T->nil;
 
-    // TODO: add vechicles as max-heap
-    s->vehicles = vehicles;
+    s->vehicles = malloc(sizeof(vehicles_t));
+    if (s->vehicles) {
+      s->vehicles->heap = vehicles;
+      s->vehicles->size = vn;
+      build_max_heap(s->vehicles);
+    } else
+      printf("[create_station] Allocation error.\n");
   } else
     printf("[create_station] Allocation error.\n");
 
@@ -252,7 +353,11 @@ void print_stations_rec(station_tree_t *T, station_t *curr) {
   if (curr->left != T->nil)
     print_stations_rec(T, curr->left);
 
-  printf("%d:\n", curr->key);
+  printf("%d:\n  ", curr->key);
+  int i;
+  for (i = 0; i < curr->vehicles->size; i++)
+    printf("%d ", curr->vehicles->heap[i]);
+  printf("\n");
 
   if (curr->right != T->nil)
     print_stations_rec(T, curr->right);
