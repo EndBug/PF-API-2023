@@ -21,6 +21,7 @@ typedef struct station_tree_ {
 } station_tree_t;
 
 void cmd_add_station(station_tree_t *T);
+void cmd_remove_station(station_tree_t *T);
 void print_stations(station_tree_t *T);
 
 int main() {
@@ -40,8 +41,9 @@ int main() {
     while (eof_res >= 0) {
       if (!strcmp(command, "aggiungi-stazione"))
         cmd_add_station(T);
-      else if (!strcmp(command, "demolisci-stazione")) {
-      } else if (!strcmp(command, "aggiungi-auto")) {
+      else if (!strcmp(command, "demolisci-stazione"))
+        cmd_remove_station(T);
+      else if (!strcmp(command, "aggiungi-auto")) {
       } else if (!strcmp(command, "rottama-auto")) {
       } else if (!strcmp(command, "pianifica-percorso")) {
       } else {
@@ -349,6 +351,7 @@ station_t *find_station(station_tree_t *T, int key) {
   return find_station_rec(T, key, T->root);
 }
 
+/** Recursive step of `print_stations` */
 void print_stations_rec(station_tree_t *T, station_t *curr) {
   if (curr->left != T->nil)
     print_stations_rec(T, curr->left);
@@ -362,8 +365,144 @@ void print_stations_rec(station_tree_t *T, station_t *curr) {
   if (curr->right != T->nil)
     print_stations_rec(T, curr->right);
 }
+/** Prints all the stations in the RB tree */
 void print_stations(station_tree_t *T) {
   return print_stations_rec(T, T->root);
+}
+
+/** Subroutine called by `remove_station` */
+void station_transplant(station_tree_t *T, station_t *u, station_t *v) {
+  if (u->parent == T->nil)
+    T->root = v;
+  else if (u == u->parent->left)
+    u->parent->left = v;
+  else
+    u->parent->right = v;
+
+  v->parent = u->parent;
+}
+
+/**
+ * @brief Finds the element of the tree with the minimum key
+ *
+ * @param T A pointer to the stations tree
+ * @return A pointer to the element with the lowest key, the leftmost child
+ */
+station_t *tree_minimum(station_tree_t *T) {
+  station_t *x = T->root;
+  while (x->left != T->nil)
+    x = x->left;
+  return x;
+}
+
+/**
+ * @brief Fixes the RB station tree after deletion
+ *
+ * @param T A pointer to the stations tree
+ * @param x A pointer to the removed node
+ */
+void remove_station_fixup(station_tree_t *T, station_t *x) {
+  station_t *w;
+
+  while (x != T->root && x->color == BLACK) {
+    if (x == x->parent->left) {
+      w = x->parent->right;
+
+      if (w->color == RED) {
+        w->color = BLACK;
+        x->parent->color = RED;
+        station_rotate_left(T, x->parent);
+        w = x->parent->right;
+      }
+
+      if (w->left->color == BLACK && w->right->color == BLACK) {
+        w->color = RED;
+        x = x->parent;
+      } else {
+        if (w->right->color == BLACK) {
+          w->left->color = BLACK;
+          w->color = RED;
+          station_rotate_right(T, w);
+          w = x->parent->right;
+        }
+
+        w->color = x->parent->color;
+        x->parent->color = BLACK;
+        w->right->color = BLACK;
+        station_rotate_left(T, x->parent);
+        x = T->root;
+      }
+    } else {
+      w = x->parent->left;
+
+      if (w->color == RED) {
+        w->color = BLACK;
+        x->parent->color = RED;
+        station_rotate_right(T, x->parent);
+        w = x->parent->left;
+      }
+
+      if (w->right->color == BLACK && w->left->color == BLACK) {
+        w->color = RED;
+        x = x->parent;
+      } else {
+        if (w->left->color == BLACK) {
+          w->right->color = BLACK;
+          w->color = RED;
+          station_rotate_left(T, w);
+          w = x->parent->left;
+        }
+
+        w->color = x->parent->color;
+        x->parent->color = BLACK;
+        w->left->color = BLACK;
+        station_rotate_right(T, x->parent);
+        x = T->root;
+      }
+    }
+  }
+
+  x->color = BLACK;
+}
+
+/**
+ * @brief Removes a station form the RB tree
+ *
+ * @param T A pointer to the stations tree
+ * @param z A pointer to the node to remove
+ */
+void remove_station(station_tree_t *T, station_t *z) {
+  station_t *x;
+  station_t *y = z;
+  int y_orig_col = y->color;
+
+  if (z->left == T->nil) {
+    x = z->right;
+    station_transplant(T, z, z->right);
+  } else if (z->right == T->nil) {
+    x = z->left;
+    station_transplant(T, z, z->left);
+  } else {
+    y = tree_minimum(T);
+    y_orig_col = y->color;
+    x = y->right;
+
+    if (y->parent == z)
+      x->parent = y;
+    else {
+      station_transplant(T, y, y->right);
+      y->right = z->right;
+      y->right->parent = y;
+    }
+
+    station_transplant(T, z, y);
+    y->left = z->left;
+    y->left->parent = y;
+    y->color = z->color;
+  }
+
+  if (y_orig_col == BLACK)
+    remove_station_fixup(T, x);
 }
 
 #pragma endregion
@@ -393,6 +532,23 @@ void cmd_add_station(station_tree_t *T) {
       printf("aggiunta\n");
     } else
       printf("[cmd_add_station] Allocation error.\n");
+  }
+}
+
+void cmd_remove_station(station_tree_t *T) {
+  int dist;
+  scanf("%d", &dist);
+
+  station_t *node = find_station(T, dist);
+  if (node != T->nil) {
+    remove_station(T, node);
+
+    free(node->vehicles->heap);
+    free(node);
+
+    printf("demolita\n");
+  } else {
+    printf("non demolita\n");
   }
 }
 
