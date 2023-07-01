@@ -22,6 +22,8 @@ typedef struct station_tree_ {
 
 void cmd_add_station(station_tree_t *T);
 void cmd_remove_station(station_tree_t *T);
+void cmd_add_vehicle(station_tree_t *T);
+void cmd_remove_vehicle(station_tree_t *T);
 void print_stations(station_tree_t *T);
 
 int main() {
@@ -43,9 +45,11 @@ int main() {
         cmd_add_station(T);
       else if (!strcmp(command, "demolisci-stazione"))
         cmd_remove_station(T);
-      else if (!strcmp(command, "aggiungi-auto")) {
-      } else if (!strcmp(command, "rottama-auto")) {
-      } else if (!strcmp(command, "pianifica-percorso")) {
+      else if (!strcmp(command, "aggiungi-auto"))
+        cmd_add_vehicle(T);
+      else if (!strcmp(command, "rottama-auto"))
+        cmd_remove_vehicle(T);
+      else if (!strcmp(command, "pianifica-percorso")) {
       } else {
         printf("Unknown command: %s\n", command);
         return -1;
@@ -118,7 +122,7 @@ void build_max_heap(vehicles_t *A) {
  * @brief Removes the maximum element of a heap and returns it
  *
  * @param A A pointer to the heap structure
- * @return The maximum element of the heap
+ * @return The maximum element of the heap, or -1 if the heap is empty
  */
 int heap_shift(vehicles_t *A) {
   if (A->size < 1)
@@ -148,6 +152,42 @@ void heap_insert(vehicles_t *A, int key) {
     swap(&A->heap[parent(i) - 1], &A->heap[i - 1]);
     i = parent(i);
   }
+}
+
+/**
+ * @brief Returns the maximum element of the heap
+ *
+ * @param A A pointer to the heap structure
+ * @return The maximum element, or -1 if the heap is empty
+ */
+int heap_max(vehicles_t *A) {
+  if (A->size < 1)
+    return -1;
+
+  return A->heap[0];
+}
+
+/**
+ * @brief Deletes an element from the heap
+ *
+ * @param A A pointer to the heap structure
+ * @param key The value f the element to delete
+ * @return Whether the element was deleted
+ */
+int heap_delete(vehicles_t *A, int key) {
+  int i;
+  for (i = 0; i < A->size && A->heap[i] != key; i++)
+    ;
+
+  if (i == A->size)
+    return -1;
+
+  A->heap[i] = A->heap[A->size - 1];
+  A->size = A->size - 1;
+
+  max_heapify(A, i + 1); // 1-based
+
+  return 1;
 }
 
 #pragma endregion
@@ -345,7 +385,7 @@ station_t *find_station_rec(station_tree_t *T, int key, station_t *curr) {
  *
  * @param T A pointer to the tree to search
  * @param key The key of the node to search for
- * @return A pointer to the target node
+ * @return A pointer to the target node, or to T->nil when it can't be found
  */
 station_t *find_station(station_tree_t *T, int key) {
   return find_station_rec(T, key, T->root);
@@ -550,6 +590,29 @@ void cmd_remove_station(station_tree_t *T) {
   } else {
     printf("non demolita\n");
   }
+}
+
+void cmd_add_vehicle(station_tree_t *T) {
+  int dist, range;
+  scanf("%d %d", &dist, &range);
+
+  station_t *station = find_station(T, dist);
+  if (station != T->nil) {
+    heap_insert(station->vehicles, range);
+    printf("aggiunta.\n");
+  } else
+    printf("non aggiunta.\n");
+}
+
+void cmd_remove_vehicle(station_tree_t *T) {
+  int dist, range;
+  scanf("%d %d", &dist, &range);
+
+  station_t *station = find_station(T, dist);
+  if (station != T->nil && heap_delete(station->vehicles, range))
+    printf("rottamata.\n");
+  else
+    printf("non rottamata.\n");
 }
 
 #pragma endregion
