@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,13 +19,34 @@ typedef struct station_ {
 } station_t;
 typedef struct station_tree_ {
   station_t *root, *nil;
+  int size;
 } station_tree_t;
+
+typedef struct graph_node_ {
+  station_t *station;
+
+  int d;
+  struct graph_node_ *p;
+
+  struct graph_node_ **adj;
+  int n_adj;
+} graph_node_t;
+
+typedef struct graph_ {
+  int size;
+  /** An ORDERED array of pointers to each graph node, from source to
+   * destination */
+  graph_node_t **nodes;
+
+} graph_t;
 
 void cmd_add_station(station_tree_t *T);
 void cmd_remove_station(station_tree_t *T);
 void cmd_add_vehicle(station_tree_t *T);
 void cmd_remove_vehicle(station_tree_t *T);
+void cmd_plan_trip(station_tree_t *T);
 void print_stations(station_tree_t *T);
+void destroy_tree(station_tree_t *T);
 
 int main() {
   station_tree_t *T = malloc(sizeof(station_tree_t));
@@ -35,6 +57,7 @@ int main() {
     T->nil->right = T->nil;
     T->nil->parent = T->nil;
     T->root = T->nil;
+    T->size = 0;
 
     char command[20];
     // eof_res should be -1 when there is no stdin left to read
@@ -49,14 +72,17 @@ int main() {
         cmd_add_vehicle(T);
       else if (!strcmp(command, "rottama-auto"))
         cmd_remove_vehicle(T);
-      else if (!strcmp(command, "pianifica-percorso")) {
-      } else {
+      else if (!strcmp(command, "pianifica-percorso"))
+        cmd_plan_trip(T);
+      else {
         printf("Unknown command: %s\n", command);
         return -1;
       }
 
       eof_res = scanf("%s", command);
     }
+
+    destroy_tree(T);
   } else {
     printf("[main] Allocation error.\n");
     return -1;
@@ -145,6 +171,7 @@ int heap_shift(vehicles_t *A) {
  */
 void heap_insert(vehicles_t *A, int key) {
   A->size = A->size + 1;
+  A->heap = realloc(A->heap, sizeof(int) * A->size);
   A->heap[A->size - 1] = key;
 
   int i = A->size;
@@ -357,6 +384,7 @@ void insert_station(station_tree_t *T, station_t *x) {
     pre->right = x;
 
   x->color = RED;
+  T->size = T->size + 1;
   insert_station_fixup(T, x);
 }
 
@@ -541,10 +569,205 @@ void remove_station(station_tree_t *T, station_t *z) {
     y->color = z->color;
   }
 
+  T->size = T->size - 1;
   if (y_orig_col == BLACK)
     remove_station_fixup(T, x);
 }
 
+/**
+ * @brief Deallocates stations recursively
+ *
+ * @param T A pointer to the staations tree
+ * @param curr The current station node
+ */
+void destroy_tree_rec(station_tree_t *T, station_t *curr) {
+  if (curr != T->nil) {
+    destroy_tree_rec(T, curr->left);
+    destroy_tree_rec(T, curr->right);
+
+    free(curr->vehicles->heap);
+    free(curr->vehicles);
+    free(curr);
+  }
+}
+/**
+ * @brief Deallocates a stations tree from memory
+ *
+ * @param T A pointer to the station tree
+ */
+void destroy_tree(station_tree_t *T) {
+  destroy_tree_rec(T, T->root);
+  free(T->nil);
+  free(T);
+}
+
+#pragma endregion
+
+#pragma region graph
+/**
+ * @brief Initializes the source of the trip for `dag_shortest_paths`
+ *
+ * @param G A pointer to the graph
+ * @param s A pointer to the source node
+ */
+void initialize_single_source(graph_t *G, graph_node_t *s) {
+  int i;
+  for (i = 0; i < G->size; i++) {
+    G->nodes[i]->d = INT_MAX;
+    G->nodes[i]->p = NULL;
+  }
+
+  s->d = 0;
+}
+
+/**
+ * @brief Performs relaxation on two given graph nodes for `dag_shortest_paths`
+ *
+ * @param u A pointer to the local source node
+ * @param v A pointer to the local destination node
+ */
+void relax(graph_node_t *u, graph_node_t *v) {
+  // We're considering all weights to be 1
+  if (v->d > u->d + 1) {
+    v->d = u->d + 1;
+    v->p = u;
+  }
+}
+
+/**
+ * @brief Pathfinding algorithm for Directed Acyclic Graphs
+ * The path information is stored in the ->d and ->p properties of each node.
+ *
+ * @param G A pointer to the graph
+ */
+void dag_shortest_paths(graph_t *G) {
+  initialize_single_source(G, G->nodes[0]);
+
+  int i, j;
+  for (i = 0; i < G->size; i++) {
+    graph_node_t *u = G->nodes[i];
+
+    for (j = 0; j < u->n_adj; j++)
+      relax(u, u->adj[j]);
+  }
+}
+
+/**
+ * @brief Recursive step of `add_graph_nodes`
+ * It's an in-order tree walk that add every node in the [source, destination]
+ * range to the graph.
+ *
+ * @param G A pointer to the graph
+ * @param T A pointer to the stations tree
+ * @param node A pointer to the current station node
+ * @param source The distance of the source station
+ * @param dest The distance of the destination station
+ */
+void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
+                         int source, int dest) {
+  if (node == T->nil)
+    return;
+
+  if (node->left != T->nil && node->left->key >= source)
+    add_graph_nodes_rec(G, T, node->left, source, dest);
+
+  if (node->key >= source && node->key <= dest) {
+    graph_node_t *gn = malloc(sizeof(graph_node_t));
+    gn->station = node;
+    gn->n_adj = 0;
+
+    G->nodes[G->size] = gn;
+    G->size = G->size + 1;
+  }
+
+  if (node->right != T->nil && node->right->key <= dest)
+    add_graph_nodes_rec(G, T, node->right, source, dest);
+}
+/**
+ * @brief Populates the graph with nodes corresponding to the stations within
+ * the [source, dest] range
+ *
+ * @param G A pointer to the graph
+ * @param T A pointer to the stations tree
+ * @param source The distance of the source station
+ * @param dest The distance of the destination station
+ */
+void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
+  add_graph_nodes_rec(G, T, T->root, source, dest);
+
+  int i;
+  // For every graph node...
+  for (i = 0; i < G->size; i++) {
+    graph_node_t *node = G->nodes[i];
+    int range = heap_max(node->station->vehicles); // get the max range,
+
+    graph_node_t *tmp_adj[G->size];
+    int tmp_adj_n = 0;
+
+    int j;
+    // note the pointers to every "adjacent" node
+    for (j = i + 1; j < G->size; j++) {
+      graph_node_t *probe = G->nodes[j];
+
+      if (probe->station->key <= node->station->key + range) {
+        tmp_adj[tmp_adj_n] = probe;
+        tmp_adj_n++;
+      } else
+        break;
+    }
+
+    // and copy them to the ->adj property
+    node->adj = malloc(sizeof(graph_node_t *) * tmp_adj_n);
+    if (node->adj != NULL) {
+      for (j = 0; j < tmp_adj_n; j++)
+        node->adj[j] = tmp_adj[j];
+      node->n_adj = tmp_adj_n;
+    } else
+      printf("[add_graph_nodes] Allocation error.\n");
+  }
+}
+
+/**
+ * @brief Generates a graph from the given stations tree
+ *
+ * @param T A pointer to the stations tree
+ * @param source The distance of the source station
+ * @param dest The distance of the destination station
+ * @return A pointer to the newly created graph
+ */
+graph_t *build_graph(station_tree_t *T, int source, int dest) {
+  graph_t *G = malloc(sizeof(graph_t));
+
+  if (G != NULL) {
+    G->size = 0;
+    G->nodes = malloc(sizeof(graph_node_t *) * T->size);
+
+    if (G->nodes != NULL) {
+      add_graph_nodes(G, T, source, dest);
+      return G;
+    } else
+      printf("[build_graph] Allocation error.\n");
+  } else
+    printf("[build_graph] Allocation error.\n");
+
+  return NULL;
+}
+
+/**
+ * @brief Deallocates a graph from memory
+ *
+ * @param G A pointer to the graph
+ */
+void destroy_graph(graph_t *G) {
+  int i;
+  for (i = 0; i < G->size; i++) {
+    graph_node_t *node = G->nodes[i];
+    free(node->adj);
+    free(node);
+  }
+  free(G->nodes);
+  free(G);
+}
 #pragma endregion
 
 #pragma region commands
@@ -599,9 +822,9 @@ void cmd_add_vehicle(station_tree_t *T) {
   station_t *station = find_station(T, dist);
   if (station != T->nil) {
     heap_insert(station->vehicles, range);
-    printf("aggiunta.\n");
+    printf("aggiunta\n");
   } else
-    printf("non aggiunta.\n");
+    printf("non aggiunta\n");
 }
 
 void cmd_remove_vehicle(station_tree_t *T) {
@@ -613,6 +836,33 @@ void cmd_remove_vehicle(station_tree_t *T) {
     printf("rottamata.\n");
   else
     printf("non rottamata.\n");
+}
+
+void cmd_plan_trip(station_tree_t *T) {
+  int source, dest;
+  scanf("%d %d", &source, &dest);
+
+  graph_t *G = build_graph(T, source, dest);
+  if (G != NULL) {
+    dag_shortest_paths(G);
+    graph_node_t *curr = G->nodes[G->size - 1];
+    if (curr->d != INT_MAX) {
+      int inv_path[G->size], path_size = 0;
+
+      while (curr != NULL) {
+        inv_path[path_size] = curr->station->key;
+        path_size++;
+        curr = curr->p;
+      }
+
+      for (; path_size > 0; path_size--)
+        printf("%d ", inv_path[path_size - 1]);
+      printf("\n");
+    } else
+      printf("nessun percorso\n");
+
+    destroy_graph(G);
+  }
 }
 
 #pragma endregion
