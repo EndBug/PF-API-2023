@@ -6,6 +6,9 @@
 #define BLACK 0
 #define RED 1
 
+#define FORWARD 0
+#define BACKWARD 1
+
 typedef struct vehicles_ {
   int size;
   int *heap;
@@ -535,6 +538,17 @@ void remove_station_fixup(station_tree_t *T, station_t *x) {
 }
 
 /**
+ * @brief Deallocates a station
+ *
+ * @param z A pointer to the station to deallocate
+ */
+void destroy_station(station_t *z) {
+  free(z->vehicles->heap);
+  free(z->vehicles);
+  free(z);
+}
+
+/**
  * @brief Removes a station form the RB tree
  *
  * @param T A pointer to the stations tree
@@ -586,9 +600,7 @@ void destroy_tree_rec(station_tree_t *T, station_t *curr) {
     destroy_tree_rec(T, curr->left);
     destroy_tree_rec(T, curr->right);
 
-    free(curr->vehicles->heap);
-    free(curr->vehicles);
-    free(curr);
+    destroy_station(curr);
   }
 }
 /**
@@ -605,6 +617,21 @@ void destroy_tree(station_tree_t *T) {
 #pragma endregion
 
 #pragma region graph
+/**
+ * @brief Get the direction of a graph
+ *
+ * @param source The distance of the source station from the start of the road
+ * @param dest The distance of the destination station from the start of the
+ * road
+ * @return Either `FORWARD` or `BACKWARD`
+ */
+int get_direction(int source, int dest) {
+  if (source <= dest)
+    return FORWARD;
+  else
+    return BACKWARD;
+}
+
 /**
  * @brief Initializes the source of the trip for `dag_shortest_paths`
  *
@@ -626,10 +653,12 @@ void initialize_single_source(graph_t *G, graph_node_t *s) {
  *
  * @param u A pointer to the local source node
  * @param v A pointer to the local destination node
+ * @param direction The direction in which the road is being used
  */
-void relax(graph_node_t *u, graph_node_t *v) {
+void relax(graph_node_t *u, graph_node_t *v, int direction) {
   // We're considering all weights to be 1
-  if (v->d > u->d + 1) {
+  if ((direction == FORWARD && v->d > u->d + 1) ||
+      (direction == BACKWARD && v->d >= u->d + 1)) {
     v->d = u->d + 1;
     v->p = u;
   }
@@ -644,12 +673,15 @@ void relax(graph_node_t *u, graph_node_t *v) {
 void dag_shortest_paths(graph_t *G) {
   initialize_single_source(G, G->nodes[0]);
 
+  int direction = get_direction(G->nodes[0]->station->key,
+                                G->nodes[G->size - 1]->station->key);
+
   int i, j;
   for (i = 0; i < G->size; i++) {
     graph_node_t *u = G->nodes[i];
 
     for (j = 0; j < u->n_adj; j++)
-      relax(u, u->adj[j]);
+      relax(u, u->adj[j], direction);
   }
 }
 
@@ -669,20 +701,45 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
   if (node == T->nil)
     return;
 
-  if (node->left != T->nil && node->key > source)
-    add_graph_nodes_rec(G, T, node->left, source, dest);
+  int direction = get_direction(source, dest);
 
-  if (node->key >= source && node->key <= dest) {
-    graph_node_t *gn = malloc(sizeof(graph_node_t));
-    gn->station = node;
-    gn->n_adj = 0;
+  if (direction == FORWARD) {
+    if (node->left != T->nil && node->key > source)
+      add_graph_nodes_rec(G, T, node->left, source, dest);
 
-    G->nodes[G->size] = gn;
-    G->size = G->size + 1;
+    if (node->key >= source && node->key <= dest) {
+      graph_node_t *gn = malloc(sizeof(graph_node_t));
+      if (gn) {
+        gn->station = node;
+        gn->n_adj = 0;
+
+        G->nodes[G->size] = gn;
+        G->size = G->size + 1;
+      } else
+        printf("[add_graph_nodes_rec] Allocation error.\n");
+    }
+
+    if (node->right != T->nil && node->key < dest)
+      add_graph_nodes_rec(G, T, node->right, source, dest);
+  } else {
+    if (node->right != T->nil && node->key < source)
+      add_graph_nodes_rec(G, T, node->right, source, dest);
+
+    if (node->key <= source && node->key >= dest) {
+      graph_node_t *gn = malloc(sizeof(graph_node_t));
+      if (gn) {
+        gn->station = node;
+        gn->n_adj = 0;
+
+        G->nodes[G->size] = gn;
+        G->size = G->size + 1;
+      } else
+        printf("[add_graph_nodes_rec] Allocation error.\n");
+    }
+
+    if (node->left != T->nil && node->key > dest)
+      add_graph_nodes_rec(G, T, node->left, source, dest);
   }
-
-  if (node->right != T->nil && node->key < dest)
-    add_graph_nodes_rec(G, T, node->right, source, dest);
 }
 /**
  * @brief Populates the graph with nodes corresponding to the stations within
@@ -696,8 +753,10 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
 void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
   add_graph_nodes_rec(G, T, T->root, source, dest);
 
+  int direction = get_direction(source, dest);
+
   int i;
-  // For every graph node...
+  // For every graph node (from source to destination)...
   for (i = 0; i < G->size; i++) {
     graph_node_t *node = G->nodes[i];
     int range = heap_max(node->station->vehicles); // get the max range,
@@ -706,11 +765,15 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
     int tmp_adj_n = 0;
 
     int j;
-    // note the pointers to every "adjacent" node
+    // note the pointers to every "adjacent" node, from the closest TO THE
+    // SOURCE to the furthest
     for (j = i + 1; j < G->size; j++) {
       graph_node_t *probe = G->nodes[j];
 
-      if (probe->station->key <= node->station->key + range) {
+      if ((direction == FORWARD &&
+           probe->station->key <= node->station->key + range) ||
+          (direction == BACKWARD &&
+           probe->station->key >= node->station->key - range)) {
         tmp_adj[tmp_adj_n] = probe;
         tmp_adj_n++;
       } else
@@ -718,10 +781,15 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
     }
 
     // and copy them to the ->adj property
+    // !!! They must be in order of distance FROM THE START OF THE ROAD
     node->adj = malloc(sizeof(graph_node_t *) * tmp_adj_n);
     if (node->adj != NULL) {
       for (j = 0; j < tmp_adj_n; j++)
-        node->adj[j] = tmp_adj[j];
+        if (direction == FORWARD)
+          node->adj[j] = tmp_adj[j];
+        else
+          node->adj[j] = tmp_adj[tmp_adj_n - j - 1];
+
       node->n_adj = tmp_adj_n;
     } else
       printf("[add_graph_nodes] Allocation error.\n");
@@ -786,7 +854,7 @@ void cmd_add_station(station_tree_t *T) {
 
   if (find_station(T, dist) != T->nil) {
     printf("non aggiunta\n");
-    char *_ = "";
+    char _[50] = "";
     scanf("%[^\n]", _); // Discards the rest of the line
   } else {
     int i;
@@ -814,8 +882,7 @@ void cmd_remove_station(station_tree_t *T) {
   if (node != T->nil) {
     remove_station(T, node);
 
-    free(node->vehicles->heap);
-    free(node);
+    destroy_station(node);
 
     printf("demolita\n");
   } else {
