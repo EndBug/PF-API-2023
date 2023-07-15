@@ -421,12 +421,13 @@ station_t *find_station(station_tree_t *T, int key) {
 
 /** Recursive step of `print_stations` */
 void print_stations_rec(station_tree_t *T, station_t *curr) {
+
   if (curr->left != T->nil)
     print_stations_rec(T, curr->left);
 
   printf("%d:\n  ", curr->key);
   int i;
-  for (i = 0; i < curr->vehicles->size; i++)
+  for (i = 0; curr->vehicles != NULL && i < curr->vehicles->size; i++)
     printf("%d ", curr->vehicles->heap[i]);
   printf("\n");
 
@@ -668,7 +669,7 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
   if (node == T->nil)
     return;
 
-  if (node->left != T->nil && node->left->key >= source)
+  if (node->left != T->nil && node->key > source)
     add_graph_nodes_rec(G, T, node->left, source, dest);
 
   if (node->key >= source && node->key <= dest) {
@@ -680,7 +681,7 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
     G->size = G->size + 1;
   }
 
-  if (node->right != T->nil && node->right->key <= dest)
+  if (node->right != T->nil && node->key < dest)
     add_graph_nodes_rec(G, T, node->right, source, dest);
 }
 /**
@@ -751,6 +752,13 @@ graph_t *build_graph(station_tree_t *T, int source, int dest) {
     printf("[build_graph] Allocation error.\n");
 
   return NULL;
+}
+
+void print_graph(graph_t *G) {
+  int i;
+  for (i = 0; i < G->size; i++)
+    printf("%d ", G->nodes[i]->station->key);
+  printf("\n");
 }
 
 /**
@@ -833,9 +841,9 @@ void cmd_remove_vehicle(station_tree_t *T) {
 
   station_t *station = find_station(T, dist);
   if (station != T->nil && heap_delete(station->vehicles, range))
-    printf("rottamata.\n");
+    printf("rottamata\n");
   else
-    printf("non rottamata.\n");
+    printf("non rottamata\n");
 }
 
 void cmd_plan_trip(station_tree_t *T) {
@@ -844,20 +852,32 @@ void cmd_plan_trip(station_tree_t *T) {
 
   graph_t *G = build_graph(T, source, dest);
   if (G != NULL) {
-    dag_shortest_paths(G);
-    graph_node_t *curr = G->nodes[G->size - 1];
-    if (curr->d != INT_MAX) {
-      int inv_path[G->size], path_size = 0;
+    if (G->size != 0) {
+      dag_shortest_paths(G);
+      graph_node_t *curr = G->nodes[G->size - 1];
+      if (curr->d != INT_MAX) {
+        int inv_path[G->size], path_size = 0;
+        graph_node_t *last;
 
-      while (curr != NULL) {
-        inv_path[path_size] = curr->station->key;
-        path_size++;
-        curr = curr->p;
-      }
+        while (curr != NULL) {
+          inv_path[path_size] = curr->station->key;
+          path_size++;
+          last = curr;
+          curr = curr->p;
+        }
 
-      for (; path_size > 0; path_size--)
-        printf("%d ", inv_path[path_size - 1]);
-      printf("\n");
+        if (last->station->key != source)
+          printf("nessun percorso\n");
+        else {
+          for (; path_size > 0; path_size--) {
+            printf("%d", inv_path[path_size - 1]);
+            if (path_size > 1)
+              printf(" ");
+          }
+          printf("\n");
+        }
+      } else
+        printf("nessun percorso\n");
     } else
       printf("nessun percorso\n");
 
