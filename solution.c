@@ -92,7 +92,7 @@ int main() {
   }
 }
 
-#pragma region max_heap
+// #region max_heap
 /** Returns the 1-based index of the left child of the n-th element of a 1-based
  * array */
 int left(int n) { return 2 * n; }
@@ -220,9 +220,9 @@ int heap_delete(vehicles_t *A, int key) {
   return 1;
 }
 
-#pragma endregion
+// #endregion
 
-#pragma region RB_tree
+// #region RB_tree
 
 /**
  * @brief Creates a station
@@ -614,9 +614,9 @@ void destroy_tree(station_tree_t *T) {
   free(T);
 }
 
-#pragma endregion
+// #endregion
 
-#pragma region graph
+// #region graph
 /**
  * @brief Get the direction of a graph
  *
@@ -844,25 +844,28 @@ void destroy_graph(graph_t *G) {
   free(G->nodes);
   free(G);
 }
-#pragma endregion
+// #endregion
 
-#pragma region commands
+// #region commands
 
 void cmd_add_station(station_tree_t *T) {
   int dist, vn;
-  scanf("%d %d", &dist, &vn);
+  if (scanf("%d %d", &dist, &vn))
+    ;
 
   if (find_station(T, dist) != T->nil) {
     printf("non aggiunta\n");
     char _[50] = "";
-    scanf("%[^\n]", _); // Discards the rest of the line
+    if (scanf("%[^\n]", _))
+      ; // Discards the rest of the line
   } else {
     int i;
     int *vehicles = malloc(sizeof(int) * vn);
 
     if (vehicles) {
       for (i = 0; i < vn; i++)
-        scanf("%d", &vehicles[i]);
+        if (scanf("%d", &vehicles[i]))
+          ;
 
       station_t *s = create_station(T, dist, vehicles, vn);
 
@@ -876,7 +879,8 @@ void cmd_add_station(station_tree_t *T) {
 
 void cmd_remove_station(station_tree_t *T) {
   int dist;
-  scanf("%d", &dist);
+  if (scanf("%d", &dist))
+    ;
 
   station_t *node = find_station(T, dist);
   if (node != T->nil) {
@@ -892,7 +896,8 @@ void cmd_remove_station(station_tree_t *T) {
 
 void cmd_add_vehicle(station_tree_t *T) {
   int dist, range;
-  scanf("%d %d", &dist, &range);
+  if (scanf("%d %d", &dist, &range))
+    ;
 
   station_t *station = find_station(T, dist);
   if (station != T->nil) {
@@ -904,7 +909,8 @@ void cmd_add_vehicle(station_tree_t *T) {
 
 void cmd_remove_vehicle(station_tree_t *T) {
   int dist, range;
-  scanf("%d %d", &dist, &range);
+  if (scanf("%d %d", &dist, &range))
+    ;
 
   station_t *station = find_station(T, dist);
   if (station != T->nil && heap_delete(station->vehicles, range))
@@ -915,7 +921,8 @@ void cmd_remove_vehicle(station_tree_t *T) {
 
 void cmd_plan_trip(station_tree_t *T) {
   int source, dest;
-  scanf("%d %d", &source, &dest);
+  if (scanf("%d %d", &source, &dest))
+    ;
 
   graph_t *G = build_graph(T, source, dest);
   if (G != NULL) {
@@ -952,4 +959,4 @@ void cmd_plan_trip(station_tree_t *T) {
   }
 }
 
-#pragma endregion
+// #endregion
