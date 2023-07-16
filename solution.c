@@ -32,7 +32,7 @@ typedef struct graph_node_ {
   int d;
   struct graph_node_ *p;
 
-  struct graph_node_ **adj;
+  int *adj;
   int n_adj;
 } graph_node_t;
 
@@ -709,8 +709,10 @@ void dag_shortest_paths(graph_t *G) {
   for (i = 0; i < G->size; i++) {
     graph_node_t *u = G->nodes[i];
 
-    for (j = 0; j < u->n_adj; j++)
-      relax(u, u->adj[j], direction);
+    for (j = 0; j < u->n_adj; j++) {
+      graph_node_t *v = G->nodes[u->adj[j]];
+      relax(u, v, direction);
+    }
   }
 }
 
@@ -791,7 +793,7 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
     station_t *station = find_station(T, node->key);
     int range = heap_max(station->vehicles); // get the max range,
 
-    graph_node_t *tmp_adj[G->size];
+    int tmp_adj[G->size];
     int tmp_adj_n = 0;
 
     int j;
@@ -802,7 +804,7 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
 
       if ((direction == FORWARD && probe->key <= node->key + range) ||
           (direction == BACKWARD && probe->key >= node->key - range)) {
-        tmp_adj[tmp_adj_n] = probe;
+        tmp_adj[tmp_adj_n] = j;
         tmp_adj_n++;
       } else
         break;
@@ -810,7 +812,7 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
 
     // and copy them to the ->adj property
     // !!! They must be in order of distance FROM THE START OF THE ROAD
-    node->adj = malloc(sizeof(graph_node_t *) * tmp_adj_n);
+    node->adj = malloc(sizeof(int) * tmp_adj_n);
     if (node->adj != NULL) {
       for (j = 0; j < tmp_adj_n; j++)
         if (direction == FORWARD)
