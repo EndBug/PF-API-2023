@@ -2,6 +2,9 @@
 solution
 input.txt
 output.txt
+massif.txt
+massif.out.*
+callgrind.out.*
 
 # Prerequisites
 *.d

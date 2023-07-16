@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +27,7 @@ typedef struct station_tree_ {
 } station_tree_t;
 
 typedef struct graph_node_ {
-  station_t *station;
+  int key;
 
   int d;
   struct graph_node_ *p;
@@ -40,7 +41,6 @@ typedef struct graph_ {
   /** An ORDERED array of pointers to each graph node, from source to
    * destination */
   graph_node_t **nodes;
-
 } graph_t;
 
 void cmd_add_station(station_tree_t *T);
@@ -703,8 +703,7 @@ void relax(graph_node_t *u, graph_node_t *v, int direction) {
 void dag_shortest_paths(graph_t *G) {
   initialize_single_source(G, G->nodes[0]);
 
-  int direction = get_direction(G->nodes[0]->station->key,
-                                G->nodes[G->size - 1]->station->key);
+  int direction = get_direction(G->nodes[0]->key, G->nodes[G->size - 1]->key);
 
   int i, j;
   for (i = 0; i < G->size; i++) {
@@ -740,7 +739,7 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
     if (node->key >= source && node->key <= dest) {
       graph_node_t *gn = malloc(sizeof(graph_node_t));
       if (gn) {
-        gn->station = node;
+        gn->key = node->key;
         gn->n_adj = 0;
 
         G->nodes[G->size] = gn;
@@ -758,7 +757,7 @@ void add_graph_nodes_rec(graph_t *G, station_tree_t *T, station_t *node,
     if (node->key <= source && node->key >= dest) {
       graph_node_t *gn = malloc(sizeof(graph_node_t));
       if (gn) {
-        gn->station = node;
+        gn->key = node->key;
         gn->n_adj = 0;
 
         G->nodes[G->size] = gn;
@@ -789,7 +788,8 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
   // For every graph node (from source to destination)...
   for (i = 0; i < G->size; i++) {
     graph_node_t *node = G->nodes[i];
-    int range = heap_max(node->station->vehicles); // get the max range,
+    station_t *station = find_station(T, node->key);
+    int range = heap_max(station->vehicles); // get the max range,
 
     graph_node_t *tmp_adj[G->size];
     int tmp_adj_n = 0;
@@ -800,10 +800,8 @@ void add_graph_nodes(graph_t *G, station_tree_t *T, int source, int dest) {
     for (j = i + 1; j < G->size; j++) {
       graph_node_t *probe = G->nodes[j];
 
-      if ((direction == FORWARD &&
-           probe->station->key <= node->station->key + range) ||
-          (direction == BACKWARD &&
-           probe->station->key >= node->station->key - range)) {
+      if ((direction == FORWARD && probe->key <= node->key + range) ||
+          (direction == BACKWARD && probe->key >= node->key - range)) {
         tmp_adj[tmp_adj_n] = probe;
         tmp_adj_n++;
       } else
@@ -855,7 +853,7 @@ graph_t *build_graph(station_tree_t *T, int source, int dest) {
 void print_graph(graph_t *G) {
   int i;
   for (i = 0; i < G->size; i++)
-    printf("%d ", G->nodes[i]->station->key);
+    printf("%d ", G->nodes[i]->key);
   printf("\n");
 }
 
@@ -964,13 +962,13 @@ void cmd_plan_trip(station_tree_t *T) {
         graph_node_t *last;
 
         while (curr != NULL) {
-          inv_path[path_size] = curr->station->key;
+          inv_path[path_size] = curr->key;
           path_size++;
           last = curr;
           curr = curr->p;
         }
 
-        if (last->station->key != source)
+        if (last->key != source)
           printf("nessun percorso\n");
         else {
           for (; path_size > 0; path_size--) {
