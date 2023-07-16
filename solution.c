@@ -212,7 +212,7 @@ int heap_delete(vehicles_t *A, int key) {
     ;
 
   if (i == A->size)
-    return -1;
+    return 0;
 
   A->heap[i] = A->heap[A->size - 1];
   A->size = A->size - 1;
