@@ -885,7 +885,7 @@ void cmd_add_station(station_tree_t *T) {
 
   if (find_station(T, dist) != T->nil) {
     printf("non aggiunta\n");
-    char _[50] = "";
+    char _[50000] = "";
     if (scanf("%[^\n]", _))
       ; // Discards the rest of the line
   } else {
