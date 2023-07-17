@@ -1,5 +1,4 @@
 #include <limits.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +8,8 @@
 
 #define FORWARD 0
 #define BACKWARD 1
+
+#define DEBUG 0
 
 typedef struct vehicles_ {
   int size;
@@ -682,9 +683,11 @@ void initialize_single_source(station_tree_t *T, station_t *s) {
  */
 void relax(station_t *u, station_t *v, int direction) {
   // We're considering all weights to be 1
-  if ((direction == FORWARD && v->path_d > u->path_d + 1) ||
-      (direction == BACKWARD && v->path_d >= u->path_d + 1)) {
-    printf("relax %d(%d) %d(%d)\n", u->key, u->path_d, v->key, v->path_d);
+  if (v->path_d > u->path_d + 1 ||
+      (v->path_d == u->path_d + 1 && v->path_p->key > u->key)) {
+    if (DEBUG)
+      printf("relax %d(%d) %d(%d)\n", u->key, u->path_d, v->key, v->path_d);
+
     v->path_d = u->path_d + 1;
     v->path_p = u;
   }
@@ -715,10 +718,10 @@ void dag_shortest_paths_rec_inner(station_tree_t *T, station_t *u, station_t *v,
 
   if (!(direction == FORWARD &&
         (v->key <= u->key || v->key > u->key + heap_max(u->vehicles) ||
-         v->key < source || v->key > dest)) ||
-      (direction == BACKWARD &&
-       (v->key < u->key - heap_max(u->vehicles) || v->key >= u->key ||
-        v->key < dest || v->key > source)))
+         v->key < source || v->key > dest)) &&
+      !(direction == BACKWARD &&
+        (v->key < u->key - heap_max(u->vehicles) || v->key >= u->key ||
+         v->key < dest || v->key > source)))
     relax(u, v, direction);
 
   dag_shortest_paths_rec_inner(T, u, v->right, direction, source, dest);
@@ -738,14 +741,22 @@ int dag_shortest_paths_rec_outer(station_tree_t *T, station_t *u, int direction,
       (direction == BACKWARD && (u->key < dest || u->key > source))*/)
     return 0;
 
-  int nodes_left =
-      dag_shortest_paths_rec_outer(T, u->left, direction, source, dest);
+  int nodes_left, nodes_right;
 
-  printf("U: %d\n", u->key);
-  dag_shortest_paths_rec_inner(T, u, T->root, direction, source, dest);
-
-  int nodes_right =
-      dag_shortest_paths_rec_outer(T, u->right, direction, source, dest);
+  // The algorithm must run in topological order
+  if (direction == FORWARD) {
+    nodes_left =
+        dag_shortest_paths_rec_outer(T, u->left, direction, source, dest);
+    dag_shortest_paths_rec_inner(T, u, T->root, direction, source, dest);
+    nodes_right =
+        dag_shortest_paths_rec_outer(T, u->right, direction, source, dest);
+  } else {
+    nodes_right =
+        dag_shortest_paths_rec_outer(T, u->right, direction, source, dest);
+    dag_shortest_paths_rec_inner(T, u, T->root, direction, source, dest);
+    nodes_left =
+        dag_shortest_paths_rec_outer(T, u->left, direction, source, dest);
+  }
 
   return nodes_left + nodes_right + 1;
 }
@@ -850,7 +861,8 @@ void cmd_plan_trip(station_tree_t *T) {
   if (T->size != 0 && source_s != T->nil && dest_s != T->nil) {
     int valid_nodes = dag_shortest_paths(T, source_s, dest_s);
 
-    print_stations(T, 1);
+    if (DEBUG)
+      print_stations(T, 1);
 
     station_t *curr = find_station(T, dest);
 
