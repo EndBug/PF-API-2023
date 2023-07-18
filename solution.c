@@ -1,43 +1,82 @@
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define BLACK 0
-#define RED 1
+#define BLACK false
+#define RED true
 
-#define FORWARD 0
-#define BACKWARD 1
+#define FORWARD false
+#define BACKWARD true
 
 #define INFINITY INT_MAX - 10
 
 #define DEBUG 0
 
+/** Heap structure that contains the vehicle info */
 typedef struct vehicles_ {
+  /** Number of elements in the heap */
   int size;
+
+  /** Array representation of the heap */
   int *heap;
 } vehicles_t;
 
+/** Node of the RB tree that represents a station */
 typedef struct station_ {
-  int key, color;
-  struct station_ *left, *right, *parent;
+  /** Distance of the station form the start of the road */
+  int key;
 
+  /** Color of the station in the RB tree */
+  bool color;
+
+  /** Pointer to the left child of the station in the RB tree */
+  struct station_ *left;
+
+  /** Pointer to the right child of the station in the RB tree */
+  struct station_ *right;
+
+  /** Pointer to the parent of the station in the RB tree */
+  struct station_ *parent;
+
+  /** Pointer to the vehicles heap structure */
   vehicles_t *vehicles;
 } station_t;
+
+/** RB tree that contains all stations */
 typedef struct station_tree_ {
-  station_t *root, *nil;
+  /** Root of the RB tree */
+  station_t *root;
+
+  /** Special node used as the parent of the root and the child of all leaves */
+  station_t *nil;
+
+  /** Number of nodes in the RB tree */
   int size;
 } station_tree_t;
 
+/** Node of the graph used by the pathfinding algorithm*/
 typedef struct graph_node_ {
+  /** Distance of the station from the start of the road */
   int key;
+
+  /** Maximum range of the vehicles in the station */
   int range;
 
+  /** Distance from the source node */
   int d;
+
+  /** Index of the previous node in the path */
   int p;
 } graph_node_t;
+
+/** Directed Acyclic Graph that represents the road */
 typedef struct graph_ {
+  /** Array of pointers to each graph node */
   graph_node_t **nodes;
+
+  /** Number of nodes in the graph */
   int size;
 } graph_t;
 
@@ -204,20 +243,20 @@ int heap_max(vehicles_t *A) {
  * @param key The value f the element to delete
  * @return Whether the element was deleted
  */
-int heap_delete(vehicles_t *A, int key) {
+bool heap_delete(vehicles_t *A, int key) {
   int i;
   for (i = 0; i < A->size && A->heap[i] != key; i++)
     ;
 
   if (i == A->size)
-    return 0;
+    return false;
 
   A->heap[i] = A->heap[A->size - 1];
   A->size = A->size - 1;
 
   max_heapify(A, i + 1); // 1-based
 
-  return 1;
+  return true;
 }
 
 // #endregion
@@ -643,7 +682,7 @@ void destroy_tree(station_tree_t *T) {
  * road
  * @return Either `FORWARD` or `BACKWARD`
  */
-int get_direction(int source, int dest) {
+bool get_direction(int source, int dest) {
   if (source <= dest)
     return FORWARD;
   else
@@ -673,7 +712,7 @@ void initialize_single_source(graph_t *G) {
  * @param v A pointer to the local destination node
  * @param direction The direction in which the road is being used
  */
-void relax(graph_t *G, int ui, int vi, int direction) {
+void relax(graph_t *G, int ui, int vi, bool direction) {
   // We're considering all weights to be 1
 
   graph_node_t *u = G->nodes[ui];
@@ -691,7 +730,15 @@ void relax(graph_t *G, int ui, int vi, int direction) {
   }
 }
 
-void dag_shortest_path(graph_t *G, int direction) {
+/**
+ * Algorithm to compute the shortest path in a Directed Acyclic Graph
+ * The `relax` procedure has been modified to prefer nodes closer to the start
+ * of the road, as per specification.
+ *
+ * @param G A pointer to the graph
+ * @param direction The direction in which the road is being used
+ */
+void dag_shortest_path(graph_t *G, bool direction) {
   initialize_single_source(G);
 
   int ui;
@@ -711,8 +758,19 @@ void dag_shortest_path(graph_t *G, int direction) {
   }
 }
 
+/**
+ * Recursively adds nodes to the graph
+ *
+ * @param G A pointer to the graph
+ * @param T A pointer to the stations tree
+ * @param curr A pointer to the current tree node
+ * @param source The distance of the source station from the start of the road
+ * @param dest The distance of the destination station from the start of the
+ * road
+ * @param direction The direction in which the road is being used
+ */
 void add_nodes(graph_t *G, station_tree_t *T, station_t *curr, int source,
-               int dest, int direction) {
+               int dest, bool direction) {
   if (curr == T->nil)
     return;
 
@@ -753,7 +811,17 @@ void add_nodes(graph_t *G, station_tree_t *T, station_t *curr, int source,
   }
 }
 
-graph_t *build_graph(station_tree_t *T, int source, int dest) {
+/**
+ * Builds a Directed Acyclic Graph from the road
+ *
+ * @param T A pointer to the stations tree
+ * @param source The distance of the source station from the start of the road
+ * @param dest The distance of the destination station from the start of the
+ * road
+ * @param direction The direction in which the road is being used
+ * @return A pointer to the new graph
+ */
+graph_t *build_graph(station_tree_t *T, int source, int dest, bool direction) {
   graph_t *G = malloc(sizeof(graph_t));
 
   if (G != NULL) {
@@ -761,8 +829,6 @@ graph_t *build_graph(station_tree_t *T, int source, int dest) {
     G->size = 0;
 
     if (G->nodes != NULL) {
-      int direction = get_direction(source, dest);
-
       add_nodes(G, T, T->root, source, dest, direction);
 
       G->nodes = realloc(G->nodes, sizeof(graph_node_t) * G->size);
@@ -774,6 +840,7 @@ graph_t *build_graph(station_tree_t *T, int source, int dest) {
   return G;
 }
 
+/** Deallocates a graph from memory */
 void destroy_graph(graph_t *G) {
   int i;
   for (i = 0; i < G->size; i++)
@@ -862,9 +929,10 @@ void cmd_plan_trip(station_tree_t *T) {
   if (scanf("%d %d", &source, &dest))
     ;
 
-  graph_t *G = build_graph(T, source, dest);
+  bool direction = get_direction(source, dest);
+  graph_t *G = build_graph(T, source, dest, direction);
   if (G != NULL && G->size != 0) {
-    dag_shortest_path(G, get_direction(source, dest));
+    dag_shortest_path(G, direction);
 
     if (DEBUG)
       print_stations(T, 1);
