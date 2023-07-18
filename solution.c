@@ -396,26 +396,6 @@ void insert_station(station_tree_t *T, station_t *z) {
 }
 
 /**
- * @brief Recursive step of `find_station`
- *
- * @param T A pointer to the tree to search
- * @param key The key of the node to search for
- * @param curr A pointer to the current node
- * @return A pointer to the target node
- */
-station_t *find_station_rec(station_tree_t *T, int key, station_t *curr) {
-  if (curr == T->nil || curr->key == key)
-    return curr;
-
-  station_t *res = T->nil;
-  if (curr->left != T->nil)
-    res = find_station_rec(T, key, curr->left);
-  if (res == T->nil && curr->right != T->nil)
-    res = find_station_rec(T, key, curr->right);
-
-  return res;
-}
-/**
  * @brief Finds a station node in the tree
  *
  * @param T A pointer to the tree to search
@@ -423,7 +403,16 @@ station_t *find_station_rec(station_tree_t *T, int key, station_t *curr) {
  * @return A pointer to the target node, or to T->nil when it can't be found
  */
 station_t *find_station(station_tree_t *T, int key) {
-  return find_station_rec(T, key, T->root);
+  station_t *curr = T->root;
+
+  while (curr != T->nil && curr->key != key) {
+    if (curr->key < key)
+      curr = curr->right;
+    else
+      curr = curr->left;
+  }
+
+  return curr;
 }
 
 /** Recursive step of `print_stations` */
