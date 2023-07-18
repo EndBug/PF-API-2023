@@ -80,14 +80,56 @@ typedef struct graph_ {
   int size;
 } graph_t;
 
-void cmd_add_station(station_tree_t *T);
-void cmd_remove_station(station_tree_t *T);
-void cmd_add_vehicle(station_tree_t *T);
-void cmd_remove_vehicle(station_tree_t *T);
-void cmd_plan_trip(station_tree_t *T);
+void cmd_add_station(station_tree_t *T, char *args);
+void cmd_remove_station(station_tree_t *T, char *args);
+void cmd_add_vehicle(station_tree_t *T, char *args);
+void cmd_remove_vehicle(station_tree_t *T, char *args);
+void cmd_plan_trip(station_tree_t *T, char *args);
 void print_stations(station_tree_t *T, int v);
 void print_rb_tree(station_tree_t *T);
 void destroy_tree(station_tree_t *T);
+
+// #region string utils
+/**
+ * Checks if a strings starts with the given substring
+ *
+ * @param str The string to check
+ * @param pre The prefix you want the string to have
+ */
+bool strStartsWith(char *str, char *pre) {
+  while (*str != '\0' && *pre != '\0') {
+    if (*str != *pre)
+      return false;
+
+    str++;
+    pre++;
+  }
+
+  return *pre == '\0';
+}
+
+/**
+ * Reads an integer from the given string
+ *
+ * @param str The string to read the int from
+ * @param res A pointer to the int result
+ * @return The rest of the string
+ */
+char *getInt(char *str, int *res) {
+  char word[15];
+  int i;
+
+  for (i = 0; i < 15 && str[i] >= '0' && str[i] <= '9'; i++)
+    word[i] = str[i];
+  word[i] = '\0';
+
+  *res = atoi(word);
+
+  if (str[i] != '\0')
+    i++;
+  return str + i;
+}
+// #endregion
 
 int main() {
   station_tree_t *T = malloc(sizeof(station_tree_t));
@@ -101,27 +143,29 @@ int main() {
     T->root = T->nil;
     T->size = 0;
 
-    char command[20];
+    char line[10000 + 1];
     // eof_res should be -1 when there is no stdin left to read
-    int eof_res = scanf("%s", command);
+    int eof_res = scanf("%[^\n]", line);
+    getchar();
 
     while (eof_res >= 0) {
-      if (!strcmp(command, "aggiungi-stazione"))
-        cmd_add_station(T);
-      else if (!strcmp(command, "demolisci-stazione"))
-        cmd_remove_station(T);
-      else if (!strcmp(command, "aggiungi-auto"))
-        cmd_add_vehicle(T);
-      else if (!strcmp(command, "rottama-auto"))
-        cmd_remove_vehicle(T);
-      else if (!strcmp(command, "pianifica-percorso"))
-        cmd_plan_trip(T);
+      if (strStartsWith(line, "aggiungi-stazione"))
+        cmd_add_station(T, line + 18);
+      else if (strStartsWith(line, "demolisci-stazione"))
+        cmd_remove_station(T, line + 19);
+      else if (strStartsWith(line, "aggiungi-auto"))
+        cmd_add_vehicle(T, line + 14);
+      else if (strStartsWith(line, "rottama-auto"))
+        cmd_remove_vehicle(T, line + 13);
+      else if (strStartsWith(line, "pianifica-percorso"))
+        cmd_plan_trip(T, line + 19);
       else {
-        printf("Unknown command: %s\n", command);
+        printf("Unknown command: %s\n", line);
         return -1;
       }
 
-      eof_res = scanf("%s", command);
+      eof_res = scanf("%[^\n]", line);
+      getchar();
     }
 
     destroy_tree(T);
@@ -853,24 +897,20 @@ void destroy_graph(graph_t *G) {
 
 // #region commands
 
-void cmd_add_station(station_tree_t *T) {
+void cmd_add_station(station_tree_t *T, char *args) {
   int dist, vn;
-  if (scanf("%d %d", &dist, &vn))
-    ;
+  args = getInt(args, &dist);
+  args = getInt(args, &vn);
 
   if (find_station(T, dist) != T->nil) {
     printf("non aggiunta\n");
-    char _[50000] = "";
-    if (scanf("%[^\n]", _))
-      ; // Discards the rest of the line
   } else {
     int i;
     int *vehicles = malloc(sizeof(int) * vn);
 
     if (vehicles) {
       for (i = 0; i < vn; i++)
-        if (scanf("%d", &vehicles[i]))
-          ;
+        args = getInt(args, &vehicles[i]);
 
       station_t *s = create_station(T, dist, vehicles, vn);
 
@@ -882,10 +922,9 @@ void cmd_add_station(station_tree_t *T) {
   }
 }
 
-void cmd_remove_station(station_tree_t *T) {
+void cmd_remove_station(station_tree_t *T, char *args) {
   int dist;
-  if (scanf("%d", &dist))
-    ;
+  args = getInt(args, &dist);
 
   station_t *node = find_station(T, dist);
   if (node != T->nil) {
@@ -899,10 +938,10 @@ void cmd_remove_station(station_tree_t *T) {
   }
 }
 
-void cmd_add_vehicle(station_tree_t *T) {
+void cmd_add_vehicle(station_tree_t *T, char *args) {
   int dist, range;
-  if (scanf("%d %d", &dist, &range))
-    ;
+  args = getInt(args, &dist);
+  args = getInt(args, &range);
 
   station_t *station = find_station(T, dist);
   if (station != T->nil) {
@@ -912,10 +951,10 @@ void cmd_add_vehicle(station_tree_t *T) {
     printf("non aggiunta\n");
 }
 
-void cmd_remove_vehicle(station_tree_t *T) {
+void cmd_remove_vehicle(station_tree_t *T, char *args) {
   int dist, range;
-  if (scanf("%d %d", &dist, &range))
-    ;
+  args = getInt(args, &dist);
+  args = getInt(args, &range);
 
   station_t *station = find_station(T, dist);
   if (station != T->nil && heap_delete(station->vehicles, range))
@@ -924,10 +963,10 @@ void cmd_remove_vehicle(station_tree_t *T) {
     printf("non rottamata\n");
 }
 
-void cmd_plan_trip(station_tree_t *T) {
+void cmd_plan_trip(station_tree_t *T, char *args) {
   int source, dest;
-  if (scanf("%d %d", &source, &dest))
-    ;
+  args = getInt(args, &source);
+  args = getInt(args, &dest);
 
   bool direction = get_direction(source, dest);
   graph_t *G = build_graph(T, source, dest, direction);
